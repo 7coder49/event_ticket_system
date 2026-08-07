@@ -18,7 +18,7 @@ mongoose
 app.use(express.json());
 
 // Routes
-app.use("/events", eventsRouter);
+app.use(eventsRouter);
 
 // Health Check
 app.get("/", (req: Request, res: Response) => {

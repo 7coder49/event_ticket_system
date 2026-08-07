@@ -34,7 +34,7 @@ mongoose
 app.use(express.json());
 
 // Routes
-app.use("/bookings", bookingsRouter);
+app.use(bookingsRouter);
 
 // Health Check
 app.get("/", (req: Request, res: Response) => {
