@@ -1,11 +1,39 @@
-import pool from '../db.ts';
-import type { RegisterUser } from '../types/users.ts';
+import pool from "../db.ts";
+import bcrypt from "bcryptjs";
+import type { RegisterUserDto, UserDbRow } from "../types/users.ts";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
 
-async function registerUser(user: RegisterUser) {
-  const users = await pool.query('INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
-    [user.name, user.email, user.password]);
+export async function findUserByEmail(email: string): Promise<UserDbRow | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    "SELECT id, name, email, password, role, created_at FROM users WHERE email = ?",
+    [email]
+  );
 
-  return users;
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return rows[0] as UserDbRow;
 }
 
-export { registerUser };
+export async function registerUser(user: RegisterUserDto): Promise<Omit<UserDbRow, "password">> {
+  // Hash the password
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(user.password, salt);
+  const role = user.role || "user";
+
+  const [result] = await pool.query<ResultSetHeader>(
+    "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)",
+    [user.name, user.email, hashedPassword, role]
+  );
+
+  const insertId = result.insertId;
+
+  return {
+    id: insertId,
+    name: user.name,
+    email: user.email,
+    role: role,
+    created_at: new Date(),
+  };
+}
