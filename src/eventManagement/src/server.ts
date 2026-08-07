@@ -1,22 +1,30 @@
 import "dotenv/config";
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
-import usersRouter from "./controllers/users.ts";
+import mongoose from "mongoose";
+import eventsRouter from "./controllers/events.ts";
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/event_management";
+
+// Connect to MongoDB
+mongoose
+  .connect(MONGO_URI)
+  .then(() => console.log("🍃 Connected to MongoDB (Event Management)"))
+  .catch((err) => console.error("MongoDB Connection Error:", err));
 
 // Middleware
 app.use(express.json());
 
 // Routes
-app.use("/users", usersRouter);
+app.use("/events", eventsRouter);
 
 // Health Check
 app.get("/", (req: Request, res: Response) => {
   res.json({
     success: true,
-    message: "User Management Service is running 🚀",
+    message: "Event Management Service is running 🚀",
   });
 });
 
@@ -30,5 +38,5 @@ app.use((err: any, req: Request, res: Response, next: NextFunction): void => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 User Management Service running on http://localhost:${PORT}`);
+  console.log(`🚀 Event Management Service running on http://localhost:${PORT}`);
 });
