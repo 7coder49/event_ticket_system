@@ -1,5 +1,5 @@
 {
-  "name": "gateway",
+  "name": "usermanagement",
   "version": "1.0.0",
   "description": "",
   "scripts": {
@@ -20,7 +20,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "http-proxy-middleware": "^4.2.0",
+    "mysql2": "^3.23.2",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1"
   }
