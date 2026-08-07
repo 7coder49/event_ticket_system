@@ -1,11 +1,9 @@
 import { Router } from "express";
 import Joi from "joi";
-import type { PoolConnection, ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import mongoose from "mongoose";
-import { Event } from "../models/event.ts";
 import { authenticateToken } from "../middleware/auth.ts";
 import type { AuthenticatedRequest } from "../middleware/auth.ts";
 import { validateBody } from "../middleware/validation.ts";
+import { bookTicketService, getUserBookingsService } from "../services/bookings.ts";
 
 const router = Router();
 
@@ -36,62 +34,24 @@ router.post(
 
     const { eventId, tickets } = req.body;
 
-    let connection: PoolConnection | null = null;
     try {
-      // 1. Start MySQL transaction
-      connection = await db.getConnection();
-      await connection.beginTransaction();
+      const result = await bookTicketService(userId, eventId, tickets, db);
 
-      // 2. Insert booking record in MySQL
-      const [insertResult] = await connection.query<ResultSetHeader>(
-        "INSERT INTO bookings (user_id, event_id, tickets_booked) VALUES (?, ?, ?)",
-        [userId, eventId, tickets]
-      );
-
-      // 3. Atomically decrement ticket count in MongoDB
-      // Use filter condition `totalTickets: { $gte: tickets }` to ensure availability during decrement
-      const updatedEvent = await Event.findOneAndUpdate(
-        { _id: new mongoose.Types.ObjectId(eventId), totalTickets: { $gte: tickets } },
-        { $inc: { totalTickets: -tickets } },
-        { new: true }
-      ).exec();
-
-      if (!updatedEvent) {
-        // No tickets available or event not found. Rollback MySQL transaction.
-        await connection.rollback();
+      if (!result.success) {
         res.status(400).json({
           success: false,
-          message: "Booking Failed: Event not found or insufficient tickets available.",
+          message: result.message,
         });
         return;
       }
 
-      // 4. Commit MySQL transaction
-      await connection.commit();
-
       res.status(201).json({
         success: true,
-        message: "Tickets Booked Successfully",
-        data: {
-          bookingId: insertResult.insertId,
-          eventId,
-          ticketsBooked: tickets,
-          remainingTickets: updatedEvent.totalTickets,
-        },
+        message: result.message,
+        data: result.data,
       });
-    } catch (error: any) {
-      if (connection) {
-        try {
-          await connection.rollback();
-        } catch (rollbackErr) {
-          console.error("Failed to rollback MySQL transaction:", rollbackErr);
-        }
-      }
+    } catch (error) {
       next(error);
-    } finally {
-      if (connection) {
-        connection.release();
-      }
     }
   }
 );
@@ -110,44 +70,7 @@ router.get(
     }
 
     try {
-      // 1. Fetch bookings from MySQL
-      const [bookings] = await db.query<RowDataPacket[]>(
-        "SELECT id, user_id, event_id, tickets_booked, created_at FROM bookings WHERE user_id = ? ORDER BY created_at DESC",
-        [userId]
-      );
-
-      if (bookings.length === 0) {
-        res.json({
-          success: true,
-          data: [],
-        });
-        return;
-      }
-
-      // 2. Fetch event names from MongoDB
-      const eventIds = bookings.map((b) => new mongoose.Types.ObjectId(b.event_id));
-      const events = await Event.find({ _id: { $in: eventIds } }).exec();
-
-      // Create a map for easy lookup
-      const eventMap = new Map<string, typeof events[0]>();
-      events.forEach((event) => {
-        eventMap.set(event._id.toString(), event);
-      });
-
-      // 3. Join the data in application layer
-      const joinedBookings = bookings.map((booking) => {
-        const eventDetail = eventMap.get(booking.event_id);
-        return {
-          bookingId: booking.id,
-          userId: booking.user_id,
-          eventId: booking.event_id,
-          eventName: eventDetail ? eventDetail.title : "Unknown Event",
-          ticketsBooked: booking.tickets_booked,
-          eventDate: eventDetail ? eventDetail.date : null,
-          eventLocation: eventDetail ? eventDetail.location : null,
-          createdAt: booking.created_at,
-        };
-      });
+      const joinedBookings = await getUserBookingsService(userId, db);
 
       res.json({
         success: true,

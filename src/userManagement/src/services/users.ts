@@ -1,11 +1,15 @@
 import pool from "../db.ts";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import type { RegisterUserDto, UserDbRow } from "../types/users.ts";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 
+const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
+
 export async function findUserByEmail(email: string): Promise<UserDbRow | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id, name, email, password, role, created_at FROM users WHERE email = ?",
+    "SELECT id, name, email, password, role, createdAt, updatedAt, deletedAt, createdBy, updatedBy FROM users WHERE email = ?",
     [email]
   );
 
@@ -18,7 +22,7 @@ export async function findUserByEmail(email: string): Promise<UserDbRow | null> 
 
 export async function registerUser(user: RegisterUserDto): Promise<Omit<UserDbRow, "password">> {
   // Hash the password
-  const salt = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(12);
   const hashedPassword = await bcrypt.hash(user.password, salt);
   const role = user.role || "user";
 
@@ -34,6 +38,31 @@ export async function registerUser(user: RegisterUserDto): Promise<Omit<UserDbRo
     name: user.name,
     email: user.email,
     role: role,
-    created_at: new Date(),
+    createdAt: new Date(),
   };
+}
+
+export async function loginUser(email: string, password: string): Promise<string | null> {
+  const user = await findUserByEmail(email);
+  if (!user) {
+    return null;
+  }
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    return null;
+  }
+
+  const token = jwt.sign(
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+
+  return token;
 }

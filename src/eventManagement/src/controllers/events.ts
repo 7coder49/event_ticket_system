@@ -1,6 +1,6 @@
 import { Router } from "express";
 import Joi from "joi";
-import { Event } from "../models/event.ts";
+import { createEventService, listEventsService } from "../services/events.ts";
 import { authenticateToken, authorizeRole } from "../middleware/auth.ts";
 import type { AuthenticatedRequest } from "../middleware/auth.ts";
 import { validateBody } from "../middleware/validation.ts";
@@ -25,18 +25,7 @@ router.post(
   validateBody(createEventSchema),
   async (req: AuthenticatedRequest, res, next) => {
     try {
-      const { title, description, date, location, totalTickets, metadata } = req.body;
-
-      const newEvent = new Event({
-        title,
-        description,
-        date: new Date(date),
-        location,
-        totalTickets,
-        metadata,
-      });
-
-      const savedEvent = await newEvent.save();
+      const savedEvent = await createEventService(req.body);
 
       res.status(201).json({
         success: true,
@@ -54,26 +43,12 @@ router.get("/", async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.max(1, parseInt(req.query.limit as string) || 10);
-    const skip = (page - 1) * limit;
 
-    const [events, total] = await Promise.all([
-      Event.find().skip(skip).limit(limit).exec(),
-      Event.countDocuments(),
-    ]);
-
-    const totalPages = Math.ceil(total / limit);
+    const result = await listEventsService(page, limit);
 
     res.json({
       success: true,
-      data: {
-        events,
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages,
-        },
-      },
+      data: result,
     });
   } catch (error) {
     next(error);

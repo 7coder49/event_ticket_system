@@ -16,5 +16,9 @@ export type UserDbRow = {
   email: string;
   password: string;
   role: string;
-  created_at: Date;
+  createdAt: Date;
+  updatedAt?: Date;
+  deletedAt?: Date | null;
+  createdBy?: number | null;
+  updatedBy?: number | null;
 };
